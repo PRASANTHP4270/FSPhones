@@ -15,9 +15,24 @@ import org.springframework.security.web.SecurityFilterChain;
 
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.csrf.CsrfTokenRequestHandler;
+import org.springframework.security.web.csrf.XorCsrfTokenRequestAttributeHandler;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+
+
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.csrf.CsrfTokenRequestHandler;
+import org.springframework.security.web.csrf.XorCsrfTokenRequestAttributeHandler;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.util.function.Supplier;
+
 import java.util.List;
 
 @Configuration
@@ -28,6 +43,38 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
+    private static final class SpaCsrfTokenRequestHandler
+        implements CsrfTokenRequestHandler {
+
+    private final CsrfTokenRequestHandler plain =
+            new CsrfTokenRequestAttributeHandler();
+
+    private final CsrfTokenRequestHandler xor =
+            new XorCsrfTokenRequestAttributeHandler();
+
+    @Override
+    public void handle(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            Supplier<org.springframework.security.web.csrf.CsrfToken> csrfToken) {
+
+        xor.handle(request, response, csrfToken);
+        csrfToken.get();
+    }
+
+    @Override
+    public String resolveCsrfTokenValue(
+            HttpServletRequest request,
+            org.springframework.security.web.csrf.CsrfToken csrfToken) {
+
+        String headerValue = request.getHeader(csrfToken.getHeaderName());
+
+        return (headerValue != null && !headerValue.isBlank()
+                ? plain
+                : xor).resolveCsrfTokenValue(request, csrfToken);
+    }
+}
+
 
 
     @Bean
@@ -35,12 +82,17 @@ public class SecurityConfig {
             throws Exception {
 
         http
-                .cors(cors -> {})
-                .csrf(csrf -> csrf
-                        .csrfTokenRepository(
-                                CookieCsrfTokenRepository.withHttpOnlyFalse()
-                        )
-                )
+               
+.cors(cors -> {})
+.csrf(csrf -> csrf
+    .csrfTokenRepository(
+        CookieCsrfTokenRepository.withHttpOnlyFalse()
+    )
+    .csrfTokenRequestHandler(
+        new SpaCsrfTokenRequestHandler()
+    )
+)
+
                 .securityContext(context -> context
                         .securityContextRepository(
                                 new HttpSessionSecurityContextRepository()
