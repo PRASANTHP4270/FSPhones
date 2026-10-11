@@ -25,12 +25,6 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-
-import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
-import org.springframework.security.web.csrf.CsrfTokenRequestHandler;
-import org.springframework.security.web.csrf.XorCsrfTokenRequestAttributeHandler;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import java.util.function.Supplier;
 
 import java.util.List;
@@ -129,7 +123,6 @@ public class SecurityConfig {
    
 @Bean
 public CorsConfigurationSource corsConfigurationSource() {
-
     CorsConfiguration configuration = new CorsConfiguration();
 
     configuration.setAllowedOrigins(List.of(
@@ -141,7 +134,10 @@ public CorsConfigurationSource corsConfigurationSource() {
         "GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"
     ));
 
-    configuration.setAllowedHeaders(List.of("*"));
+    configuration.setAllowedHeaders(List.of(
+        "Content-Type", "X-XSRF-TOKEN", "X-CSRF-TOKEN"
+    ));
+
     configuration.setAllowCredentials(true);
 
     UrlBasedCorsConfigurationSource source =
