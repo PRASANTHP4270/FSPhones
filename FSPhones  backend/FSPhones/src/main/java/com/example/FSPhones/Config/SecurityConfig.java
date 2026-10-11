@@ -15,6 +15,7 @@ import org.springframework.security.web.SecurityFilterChain;
 
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.csrf.CsrfTokenRequestHandler;
 import org.springframework.security.web.csrf.XorCsrfTokenRequestAttributeHandler;
@@ -43,8 +44,12 @@ public class SecurityConfig {
     private final CsrfTokenRequestHandler plain =
             new CsrfTokenRequestAttributeHandler();
 
-    private final CsrfTokenRequestHandler xor =
-            new XorCsrfTokenRequestAttributeHandler();
+   private final XorCsrfTokenRequestAttributeHandler xor =
+        new XorCsrfTokenRequestAttributeHandler();
+
+        private SpaCsrfTokenRequestHandler() {
+    this.xor.setCsrfRequestAttributeName(null);
+}
 
     @Override
     public void handle(
@@ -71,21 +76,17 @@ public class SecurityConfig {
 
 
 
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http)
-            throws Exception {
+@Bean
+public SecurityFilterChain securityFilterChain(
+        HttpSecurity http,
+        CsrfTokenRepository csrfTokenRepository) throws Exception {
 
-        http
-               
-.cors(cors -> {})
-.csrf(csrf -> csrf
-    .csrfTokenRepository(
-        CookieCsrfTokenRepository.withHttpOnlyFalse()
-    )
-    .csrfTokenRequestHandler(
-        new SpaCsrfTokenRequestHandler()
-    )
-)
+    http
+        .cors(cors -> {})
+        .csrf(csrf -> csrf
+            .csrfTokenRepository(csrfTokenRepository)
+            .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler())
+        )
 
                 .securityContext(context -> context
                         .securityContextRepository(
@@ -126,9 +127,11 @@ public CorsConfigurationSource corsConfigurationSource() {
     CorsConfiguration configuration = new CorsConfiguration();
 
     configuration.setAllowedOrigins(List.of(
-        "https://fsphones-frontend.onrender.com",
-        "http://localhost:5173"
-    ));
+    "https://fsphones-frontend.onrender.com",
+    "http://localhost:5173"
+));
+
+configuration.setAllowCredentials(true);
 
     configuration.setAllowedMethods(List.of(
         "GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"
@@ -154,4 +157,8 @@ public CorsConfigurationSource corsConfigurationSource() {
             AuthenticationConfiguration configuration) throws Exception {
         return configuration.getAuthenticationManager();
     }
+    @Bean
+public CsrfTokenRepository csrfTokenRepository() {
+    return CookieCsrfTokenRepository.withHttpOnlyFalse();
+}
 }

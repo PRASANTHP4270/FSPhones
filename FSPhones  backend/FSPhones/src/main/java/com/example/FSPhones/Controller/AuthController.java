@@ -11,9 +11,11 @@ import org.springframework.web.bind.annotation.*;
 
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import java.util.Map;
 import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.security.web.csrf.CsrfTokenRepository;
 
 @RestController
 @RequestMapping("/auth")
@@ -26,9 +28,20 @@ public class AuthController {
     }
 
     @GetMapping("/csrf")
-    public Map<String, String> csrf(CsrfToken csrfToken) {
-        return Map.of("token", csrfToken.getToken());
+public Map<String, String> csrf(
+        HttpServletRequest request,
+        HttpServletResponse response,
+        CsrfTokenRepository csrfTokenRepository) {
+
+    CsrfToken token = csrfTokenRepository.loadToken(request);
+
+    if (token == null) {
+        token = csrfTokenRepository.generateToken(request);
+        csrfTokenRepository.saveToken(token, request, response);
     }
+
+    return Map.of("token", token.getToken());
+}
 
     @PostMapping("/logout")
     public Map<String, String> logout(HttpServletRequest request) {
