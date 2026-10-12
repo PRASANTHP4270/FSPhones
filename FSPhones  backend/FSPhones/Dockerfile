@@ -5,8 +5,18 @@ WORKDIR /app
 
 COPY pom.xml .
 
-RUN mkdir -p /root/.m2
-RUN printf '<settings><mirrors><mirror><id>central-alt</id><mirrorOf>central</mirrorOf><url>https://repo1.maven.org/maven2/</url></mirror></mirrors></settings>' > /root/.m2/settings.xml
+RUN mkdir -p /root/.m2 && \
+    printf '%s\n' \
+    '<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">' \
+    '  <mirrors>' \
+    '    <mirror>' \
+    '      <id>central-alt</id>' \
+    '      <mirrorOf>central</mirrorOf>' \
+    '      <url>https://repo.maven.apache.org/maven2</url>' \
+    '    </mirror>' \
+    '  </mirrors>' \
+    '</settings>' \
+    > /root/.m2/settings.xml
 
 RUN mvn -B dependency:go-offline
 
@@ -20,6 +30,6 @@ WORKDIR /app
 
 COPY --from=build /app/target/*.jar app.jar
 
-EXPOSE 8080
+EXPOSE 8081
 
 ENTRYPOINT ["java", "-jar", "app.jar"]
