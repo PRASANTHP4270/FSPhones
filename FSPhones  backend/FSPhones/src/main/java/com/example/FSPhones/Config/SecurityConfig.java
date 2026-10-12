@@ -106,16 +106,27 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             CsrfTokenRepository csrfTokenRepository,
-            SecurityContextRepository securityContextRepository) throws Exception {
+            SecurityContextRepository securityContextRepository,
+            TokenAuthenticationFilter tokenAuthenticationFilter) throws Exception {
 
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            .addFilterBefore(
+                tokenAuthenticationFilter,
+                org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class
+            )
             .csrf(csrf -> csrf
                 .csrfTokenRepository(csrfTokenRepository)
                 .csrfTokenRequestHandler(
                     new SpaCsrfTokenRequestHandler()
                 )
                 .ignoringRequestMatchers("/auth/login")
+                .ignoringRequestMatchers(request -> {
+                    String auth = request.getHeader("Authorization");
+                    String sess = request.getHeader("X-Session-Id");
+                    return (auth != null && auth.startsWith("Bearer ")) ||
+                           (sess != null && !sess.isBlank());
+                })
             )
             .securityContext(context -> context
                 .securityContextRepository(securityContextRepository)
@@ -209,6 +220,7 @@ public class SecurityConfig {
             "X-XSRF-TOKEN",
             "X-CSRF-TOKEN",
             "Authorization",
+            "X-Session-Id",
             "Accept"
         ));
 

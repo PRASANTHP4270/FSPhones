@@ -56,6 +56,14 @@ async function handleLogin(e) {
     });
 
     if (response.ok) {
+      try {
+        const data = await response.json();
+        if (data && data.token) {
+          sessionStorage.setItem("adminToken", data.token);
+        }
+      } catch (jsonErr) {
+        console.warn("Could not parse login JSON response:", jsonErr);
+      }
       sessionStorage.setItem("adminLoggedIn", "true");
       navigate("/admin-dashboard");
     } else if (response.status === 401) {

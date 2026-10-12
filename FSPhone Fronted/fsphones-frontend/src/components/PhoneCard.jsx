@@ -1,7 +1,7 @@
 
 import { Link } from "react-router-dom"
 
-import { API_BASE_URL, getCsrfToken } from "../api";
+import { API_BASE_URL, getCsrfToken, getAuthHeaders } from "../api";
 
 function PhoneCard({ phone }) {
   const isAdminLoggedIn =
@@ -17,16 +17,26 @@ async function deletePhone() {
   }
 
   try {
-    const csrfToken = await getCsrfToken();
+    let csrfToken = null;
+    try {
+      csrfToken = await getCsrfToken();
+    } catch {
+      // CSRF token is optional when token authentication is used
+    }
+
+    const headers = {
+      ...getAuthHeaders(),
+    };
+    if (csrfToken) {
+      headers["X-XSRF-TOKEN"] = csrfToken;
+    }
 
     const response = await fetch(
       `${API_BASE_URL}/phones/${phone.id}`,
       {
         method: "DELETE",
         credentials: "include",
-        headers: {
-          "X-XSRF-TOKEN": csrfToken,
-        },
+        headers,
       }
     );
 

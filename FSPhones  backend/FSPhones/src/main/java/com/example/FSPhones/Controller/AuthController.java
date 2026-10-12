@@ -1,6 +1,7 @@
 
 package com.example.FSPhones.Controller;
 
+import com.example.FSPhones.Service.AdminSessionStore;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -28,14 +29,17 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final CsrfTokenRepository csrfTokenRepository;
     private final SecurityContextRepository securityContextRepository;
+    private final AdminSessionStore adminSessionStore;
 
     public AuthController(
             AuthenticationManager authenticationManager,
             CsrfTokenRepository csrfTokenRepository,
-            SecurityContextRepository securityContextRepository) {
+            SecurityContextRepository securityContextRepository,
+            AdminSessionStore adminSessionStore) {
         this.authenticationManager = authenticationManager;
         this.csrfTokenRepository = csrfTokenRepository;
         this.securityContextRepository = securityContextRepository;
+        this.adminSessionStore = adminSessionStore;
     }
 
     @GetMapping("/csrf")
@@ -55,8 +59,16 @@ public class AuthController {
 
     @PostMapping("/logout")
     public Map<String, String> logout(HttpServletRequest request) {
-        var session = request.getSession(false);
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            adminSessionStore.remove(authHeader.substring(7).trim());
+        }
+        String sessionHeader = request.getHeader("X-Session-Id");
+        if (sessionHeader != null && !sessionHeader.isBlank()) {
+            adminSessionStore.remove(sessionHeader.trim());
+        }
 
+        var session = request.getSession(false);
         if (session != null) {
             session.invalidate();
         }
@@ -104,7 +116,14 @@ public class AuthController {
             // Persist context explicitly for Spring Security 6
             securityContextRepository.saveContext(context, request, response);
 
-            return ResponseEntity.ok(Map.of("message", "Admin login successful"));
+            String token = adminSessionStore.createToken(authentication);
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Admin login successful",
+                    "token", token,
+                    "username", authentication.getName(),
+                    "role", "ADMIN"
+            ));
         } catch (BadCredentialsException | UsernameNotFoundException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("message", "Invalid username or password"));

@@ -8,6 +8,7 @@ import {
   API_BASE_URL,
   getCsrfToken,
   checkAdminSession,
+  getAuthHeaders,
 } from "../api";
 
 import {
@@ -37,11 +38,13 @@ function AdminDashboard() {
         setIsLoggedIn(true);
       } else {
         sessionStorage.removeItem("adminLoggedIn");
+        sessionStorage.removeItem("adminToken");
         navigate("/admin-login", { replace: true });
       }
     } catch {
       if (!cancelled) {
         sessionStorage.removeItem("adminLoggedIn");
+        sessionStorage.removeItem("adminToken");
         navigate("/admin-login", { replace: true });
       }
     }
@@ -57,18 +60,23 @@ function AdminDashboard() {
 async function logout() {
   try {
     const csrfToken = await getCsrfToken();
+    const headers = {
+      ...getAuthHeaders(),
+    };
+    if (csrfToken) {
+      headers["X-XSRF-TOKEN"] = csrfToken;
+    }
 
     await fetch(`${API_BASE_URL}/auth/logout`, {
       method: "POST",
       credentials: "include",
-      headers: {
-        "X-XSRF-TOKEN": csrfToken,
-      },
+      headers,
     });
   } catch (error) {
     console.error("Logout error:", error);
   } finally {
     sessionStorage.removeItem("adminLoggedIn");
+    sessionStorage.removeItem("adminToken");
     navigate("/admin-login", { replace: true });
   }
 }

@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
-import { API_BASE_URL, getCsrfToken } from "../api";
+import { API_BASE_URL, getCsrfToken, getAuthHeaders } from "../api";
 
 import {
   ArrowLeft,
@@ -109,23 +109,33 @@ function UpdatePhone() {
    
 
      
-      const csrfToken = await getCsrfToken();
+      let csrfToken = null;
+      try {
+        csrfToken = await getCsrfToken();
+      } catch {
+        // CSRF token is optional when token authentication is used
+      }
 
-    const response = await fetch(
-  `${API_BASE_URL}/phones/${id}`,
-  {
-    method: "PUT",
-    credentials: "include",
-   headers: {
-  "Content-Type": "application/json",
-  "X-XSRF-TOKEN": csrfToken,
-},
-    body: JSON.stringify({
-      ...phone,
-      price: Number(phone.price),
-    }),
-  }
-);
+      const headers = {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      };
+      if (csrfToken) {
+        headers["X-XSRF-TOKEN"] = csrfToken;
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/phones/${id}`,
+        {
+          method: "PUT",
+          credentials: "include",
+          headers,
+          body: JSON.stringify({
+            ...phone,
+            price: Number(phone.price),
+          }),
+        }
+      );
 
 
       if (!response.ok) {

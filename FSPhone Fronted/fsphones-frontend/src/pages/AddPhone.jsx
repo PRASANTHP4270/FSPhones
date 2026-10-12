@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import { API_BASE_URL, getCsrfToken } from "../api";
+import { API_BASE_URL, getCsrfToken, getAuthHeaders } from "../api";
 
 import {
   ArrowLeft,
@@ -107,24 +107,26 @@ async function handleSubmit(e) {
     formData.append("image", phone.image);
 
     
-    let csrfToken;
+    let csrfToken = null;
+    try {
+      csrfToken = await getCsrfToken();
+    } catch {
+      // CSRF token is optional when token authentication is used
+    }
 
-try {
-  csrfToken = await getCsrfToken();
-} catch (error) {
-  setErrorMessage(error.message || "Could not get security token.");
-  setLoading(false);
-  return;
-}
+    const headers = {
+      ...getAuthHeaders(),
+    };
+    if (csrfToken) {
+      headers["X-XSRF-TOKEN"] = csrfToken;
+    }
 
-fetch(`${API_BASE_URL}/phones/with-image`, {
-  method: "POST",
-  credentials: "include",
-  headers: {
-    "X-XSRF-TOKEN": csrfToken,
-  },
-  body: formData,
-})
+    fetch(`${API_BASE_URL}/phones/with-image`, {
+      method: "POST",
+      credentials: "include",
+      headers,
+      body: formData,
+    })
 
       .then(async (response) => {
         if (!response.ok) {
