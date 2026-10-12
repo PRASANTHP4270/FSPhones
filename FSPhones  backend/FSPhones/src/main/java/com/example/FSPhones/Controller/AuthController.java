@@ -17,6 +17,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import java.util.Map;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
 
@@ -26,12 +27,15 @@ public class AuthController {
 
     private final AuthenticationManager authenticationManager;
     private final CsrfTokenRepository csrfTokenRepository;
+    private final SecurityContextRepository securityContextRepository;
 
     public AuthController(
             AuthenticationManager authenticationManager,
-            CsrfTokenRepository csrfTokenRepository) {
+            CsrfTokenRepository csrfTokenRepository,
+            SecurityContextRepository securityContextRepository) {
         this.authenticationManager = authenticationManager;
         this.csrfTokenRepository = csrfTokenRepository;
+        this.securityContextRepository = securityContextRepository;
     }
 
     @GetMapping("/csrf")
@@ -68,10 +72,7 @@ public class AuthController {
                 || !authentication.isAuthenticated()
                 || authentication.getAuthorities().stream()
                 .noneMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
-            throw new org.springframework.web.server.ResponseStatusException(
-                    org.springframework.http.HttpStatus.UNAUTHORIZED,
-                    "Admin is not logged in"
-            );
+            return Map.of("authenticated", false);
         }
 
         return Map.of(
@@ -84,7 +85,8 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> login(
             @RequestBody LoginRequest loginRequest,
-            HttpServletRequest request) {
+            HttpServletRequest request,
+            HttpServletResponse response) {
 
         try {
             Authentication authentication =
@@ -99,11 +101,8 @@ public class AuthController {
             context.setAuthentication(authentication);
             SecurityContextHolder.setContext(context);
 
-            HttpSession session = request.getSession(true);
-            session.setAttribute(
-                    HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
-                    context
-            );
+            // Persist context explicitly for Spring Security 6
+            securityContextRepository.saveContext(context, request, response);
 
             return ResponseEntity.ok(Map.of("message", "Admin login successful"));
         } catch (BadCredentialsException | UsernameNotFoundException e) {

@@ -15,6 +15,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
@@ -97,9 +98,15 @@ public class SecurityConfig {
     }
 
     @Bean
+    public SecurityContextRepository securityContextRepository() {
+        return new HttpSessionSecurityContextRepository();
+    }
+
+    @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
-            CsrfTokenRepository csrfTokenRepository) throws Exception {
+            CsrfTokenRepository csrfTokenRepository,
+            SecurityContextRepository securityContextRepository) throws Exception {
 
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
@@ -111,9 +118,7 @@ public class SecurityConfig {
                 .ignoringRequestMatchers("/auth/login")
             )
             .securityContext(context -> context
-                .securityContextRepository(
-                    new HttpSessionSecurityContextRepository()
-                )
+                .securityContextRepository(securityContextRepository)
             )
             .sessionManagement(session -> session
                 .sessionCreationPolicy(
@@ -134,9 +139,9 @@ public class SecurityConfig {
                     "/error"
                 ).permitAll()
 
-                // Public login and CSRF token retrieval
+                // Public login, CSRF token retrieval, and session verification
                 .requestMatchers(
-                    HttpMethod.GET, "/auth/csrf"
+                    HttpMethod.GET, "/auth/csrf", "/auth/me"
                 ).permitAll()
 
                 .requestMatchers(
