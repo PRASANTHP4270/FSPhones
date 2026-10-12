@@ -25,9 +25,14 @@ public class CustomUserDetailsService implements UserDetailsService {
                 .orElseThrow(() ->
                         new UsernameNotFoundException("Admin not found"));
 
+        String role = admin.getRole();
+        if (role != null && role.toUpperCase().startsWith("ROLE_")) {
+            role = role.substring(5);
+        }
+
         return User.withUsername(admin.getUsername())
                 .password(admin.getPassword())
-                .roles(admin.getRole())
+                .roles(role != null && !role.isBlank() ? role.toUpperCase() : "ADMIN")
                 .build();
     }
 }

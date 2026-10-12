@@ -23,8 +23,6 @@ function AdminLogin() {
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
- 
-
 async function handleLogin(e) {
   e.preventDefault();
 
@@ -34,13 +32,21 @@ async function handleLogin(e) {
   setLoading(true);
 
   try {
-    const csrfToken = await getCsrfToken();
+    let csrfHeaders = {};
+    try {
+      const csrfToken = await getCsrfToken();
+      if (csrfToken) {
+        csrfHeaders["X-XSRF-TOKEN"] = csrfToken;
+      }
+    } catch (csrfErr) {
+      console.warn("CSRF token fetch optional/skipped:", csrfErr);
+    }
 
     const response = await fetch(`${API_BASE_URL}/auth/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-XSRF-TOKEN": csrfToken,
+        ...csrfHeaders,
       },
       credentials: "include",
       body: JSON.stringify({
@@ -55,7 +61,18 @@ async function handleLogin(e) {
     } else if (response.status === 401) {
       setMessage("Invalid username or password.");
     } else {
-      setMessage("Login failed. Please try again.");
+      let errorMsg = `Login failed (${response.status}). Please try again.`;
+      try {
+        const errorData = await response.json();
+        if (errorData && errorData.message) {
+          errorMsg = errorData.message;
+        }
+      } catch {
+        const errorText = await response.text();
+        if (errorText) errorMsg = errorText;
+      }
+      console.error("Login failed:", response.status, errorMsg);
+      setMessage(errorMsg);
     }
   } catch (error) {
     console.error("Login error:", error);
@@ -64,6 +81,7 @@ async function handleLogin(e) {
     setLoading(false);
   }
 }
+
 
 
 

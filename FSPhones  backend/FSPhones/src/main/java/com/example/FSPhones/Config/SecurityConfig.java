@@ -1,3 +1,4 @@
+
 package com.example.FSPhones.Config;
 
 import java.util.List;
@@ -9,13 +10,13 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.csrf.CsrfTokenRequestHandler;
@@ -36,128 +37,191 @@ public class SecurityConfig {
     }
 
     private static final class SpaCsrfTokenRequestHandler
-        implements CsrfTokenRequestHandler {
+            implements CsrfTokenRequestHandler {
 
-    private final CsrfTokenRequestHandler plain =
-            new CsrfTokenRequestAttributeHandler();
+        private final CsrfTokenRequestHandler plain =
+                new CsrfTokenRequestAttributeHandler();
 
-   private final XorCsrfTokenRequestAttributeHandler xor =
-        new XorCsrfTokenRequestAttributeHandler();
+        private final CsrfTokenRequestHandler xor =
+                new XorCsrfTokenRequestAttributeHandler();
 
-        private SpaCsrfTokenRequestHandler() {
-    this.xor.setCsrfRequestAttributeName(null);
-}
+        SpaCsrfTokenRequestHandler() {
+            ((XorCsrfTokenRequestAttributeHandler) this.xor)
+                    .setCsrfRequestAttributeName(null);
+        }
 
-    @Override
-    public void handle(
-            HttpServletRequest request,
-            HttpServletResponse response,
-            Supplier<org.springframework.security.web.csrf.CsrfToken> csrfToken) {
+        @Override
+        public void handle(
+                HttpServletRequest request,
+                HttpServletResponse response,
+                Supplier<CsrfToken> csrfToken) {
 
-        xor.handle(request, response, csrfToken);
-        csrfToken.get();
+            this.xor.handle(request, response, csrfToken);
+
+            // Force token generation so the cookie can be written.
+            csrfToken.get();
+        }
+
+        @Override
+        public String resolveCsrfTokenValue(
+                HttpServletRequest request,
+                CsrfToken csrfToken) {
+
+            String headerValue =
+                    request.getHeader(csrfToken.getHeaderName());
+            if (headerValue == null || headerValue.isBlank()) {
+                headerValue = request.getHeader("X-XSRF-TOKEN");
+            }
+            if (headerValue == null || headerValue.isBlank()) {
+                headerValue = request.getHeader("X-CSRF-TOKEN");
+            }
+
+            return (headerValue != null && !headerValue.isBlank()
+                    ? this.plain
+                    : this.xor)
+                    .resolveCsrfTokenValue(request, csrfToken);
+        }
     }
 
-    @Override
-    public String resolveCsrfTokenValue(
-            HttpServletRequest request,
-            org.springframework.security.web.csrf.CsrfToken csrfToken) {
+    @Bean
+    public CsrfTokenRepository csrfTokenRepository() {
+        CookieCsrfTokenRepository repository =
+                CookieCsrfTokenRepository.withHttpOnlyFalse();
+        repository.setCookieCustomizer(customizer -> customizer
+                .sameSite("None")
+                .secure(true)
+                .path("/")
+        );
 
-        String headerValue = request.getHeader(csrfToken.getHeaderName());
-
-        return (headerValue != null && !headerValue.isBlank()
-                ? plain
-                : xor).resolveCsrfTokenValue(request, csrfToken);
+        return repository;
     }
-}
 
+    @Bean
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            CsrfTokenRepository csrfTokenRepository) throws Exception {
 
-
-@Bean
-public SecurityFilterChain securityFilterChain(
-        HttpSecurity http,
-        CsrfTokenRepository csrfTokenRepository) throws Exception {
-
-    http
-            .cors(cors -> {})
-        // .csrf(csrf -> csrf
-        //     .csrfTokenRepository(csrfTokenRepository)
-        //     .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler())
-        // )
-       
-             .csrf(AbstractHttpConfigurer::disable)
-
-                .securityContext(context -> context
-                        .securityContextRepository(
-                                new HttpSessionSecurityContextRepository()
-                        )
+        http
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            .csrf(csrf -> csrf
+                .csrfTokenRepository(csrfTokenRepository)
+                .csrfTokenRequestHandler(
+                    new SpaCsrfTokenRequestHandler()
                 )
-                .sessionManagement(session -> session
-                        .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
-                        .sessionFixation(fixation -> fixation.changeSessionId())
+                .ignoringRequestMatchers("/auth/login")
+            )
+            .securityContext(context -> context
+                .securityContextRepository(
+                    new HttpSessionSecurityContextRepository()
                 )
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
-                        // .requestMatchers(HttpMethod.GET, "/auth/csrf").permitAll()
+            )
+            .sessionManagement(session -> session
+                .sessionCreationPolicy(
+                    SessionCreationPolicy.IF_REQUIRED
+                )
+                .sessionFixation(fixation ->
+                    fixation.changeSessionId()
+                )
+            )
+            .authorizeHttpRequests(auth -> auth
 
-                        // Public phone viewing
-                        .requestMatchers(HttpMethod.GET, "/phones/**").permitAll()
+                .requestMatchers(
+                    HttpMethod.OPTIONS, "/**"
+                ).permitAll()
 
-                        // Admin-only phone operations
-                        .requestMatchers(HttpMethod.POST, "/phones").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/phones/with-image").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/phones/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/phones/**").hasRole("ADMIN")
-                        .requestMatchers("/admin/**").hasRole("ADMIN")
+                // Allow error dispatch so internal errors aren't masked as 403
+                .requestMatchers(
+                    "/error"
+                ).permitAll()
 
-                        .anyRequest().authenticated()
-                );
+                // Public login and CSRF token retrieval
+                .requestMatchers(
+                    HttpMethod.GET, "/auth/csrf"
+                ).permitAll()
+
+                .requestMatchers(
+                    HttpMethod.POST, "/auth/login"
+                ).permitAll()
+
+                // Public phone viewing
+                .requestMatchers(
+                    HttpMethod.GET, "/phones", "/phones/**"
+                ).permitAll()
+
+                // Admin-only phone creation and image uploads
+                .requestMatchers(
+                    HttpMethod.POST, "/phones"
+                ).hasRole("ADMIN")
+
+                .requestMatchers(
+                    HttpMethod.POST, "/phones/*/with-image"
+                ).hasRole("ADMIN")
+
+                // Admin-only phone updates and deletion
+                .requestMatchers(
+                    HttpMethod.PUT, "/phones/**"
+                ).hasRole("ADMIN")
+
+                .requestMatchers(
+                    HttpMethod.PATCH, "/phones/**"
+                ).hasRole("ADMIN")
+
+                .requestMatchers(
+                    HttpMethod.DELETE, "/phones/**"
+                ).hasRole("ADMIN")
+
+                .requestMatchers(
+                    "/admin/**"
+                ).hasRole("ADMIN")
+
+                // All other requests require authentication
+                .anyRequest().authenticated()
+            );
 
         return http.build();
     }
 
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
 
+        CorsConfiguration configuration = new CorsConfiguration();
 
+        configuration.setAllowedOrigins(List.of(
+            "https://fsphones-frontend.onrender.com",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173"
+        ));
 
-   
-@Bean
-public CorsConfigurationSource corsConfigurationSource() {
-    CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowCredentials(true);
 
-    configuration.setAllowedOrigins(List.of(
-    "https://fsphones-frontend.onrender.com",
-    "http://localhost:5173"
-));
+        configuration.setAllowedMethods(List.of(
+            "GET", "POST", "PUT", "PATCH",
+            "DELETE", "OPTIONS"
+        ));
 
-configuration.setAllowCredentials(true);
+        configuration.setAllowedHeaders(List.of(
+            "Content-Type",
+            "X-XSRF-TOKEN",
+            "X-CSRF-TOKEN",
+            "Authorization",
+            "Accept"
+        ));
 
-    configuration.setAllowedMethods(List.of(
-        "GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"
-    ));
+        UrlBasedCorsConfigurationSource source =
+                new UrlBasedCorsConfigurationSource();
 
-    configuration.setAllowedHeaders(List.of(
-        "Content-Type", "X-XSRF-TOKEN", "X-CSRF-TOKEN"
-    ));
+        source.registerCorsConfiguration(
+                "/**", configuration
+        );
 
-    configuration.setAllowCredentials(true);
-
-    UrlBasedCorsConfigurationSource source =
-        new UrlBasedCorsConfigurationSource();
-
-    source.registerCorsConfiguration("/**", configuration);
-
-    return source;
-}
-
+        return source;
+    }
 
     @Bean
     public AuthenticationManager authenticationManager(
-            AuthenticationConfiguration configuration) throws Exception {
+            AuthenticationConfiguration configuration)
+            throws Exception {
+
         return configuration.getAuthenticationManager();
     }
-    @Bean
-public CsrfTokenRepository csrfTokenRepository() {
-    return CookieCsrfTokenRepository.withHttpOnlyFalse();
-}
 }

@@ -1,14 +1,17 @@
 
 package com.example.FSPhones.Controller;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.web.bind.annotation.*;
-
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -22,26 +25,29 @@ import org.springframework.security.web.csrf.CsrfTokenRepository;
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;
+    private final CsrfTokenRepository csrfTokenRepository;
 
-    public AuthController(AuthenticationManager authenticationManager) {
+    public AuthController(
+            AuthenticationManager authenticationManager,
+            CsrfTokenRepository csrfTokenRepository) {
         this.authenticationManager = authenticationManager;
+        this.csrfTokenRepository = csrfTokenRepository;
     }
 
     @GetMapping("/csrf")
-public Map<String, String> csrf(
-        HttpServletRequest request,
-        HttpServletResponse response,
-        CsrfTokenRepository csrfTokenRepository) {
+    public Map<String, String> csrf(
+            HttpServletRequest request,
+            HttpServletResponse response) {
 
-    CsrfToken token = csrfTokenRepository.loadToken(request);
+        CsrfToken token = csrfTokenRepository.loadToken(request);
 
-    if (token == null) {
-        token = csrfTokenRepository.generateToken(request);
-        csrfTokenRepository.saveToken(token, request, response);
+        if (token == null) {
+            token = csrfTokenRepository.generateToken(request);
+            csrfTokenRepository.saveToken(token, request, response);
+        }
+
+        return Map.of("token", token.getToken());
     }
-
-    return Map.of("token", token.getToken());
-}
 
     @PostMapping("/logout")
     public Map<String, String> logout(HttpServletRequest request) {
@@ -76,29 +82,37 @@ public Map<String, String> csrf(
     }
 
     @PostMapping("/login")
-    public Map<String, String> login(
+    public ResponseEntity<?> login(
             @RequestBody LoginRequest loginRequest,
             HttpServletRequest request) {
 
-        Authentication authentication =
-                authenticationManager.authenticate(
-                        new UsernamePasswordAuthenticationToken(
-                                loginRequest.username(),
-                                loginRequest.password()
-                        )
-                );
+        try {
+            Authentication authentication =
+                    authenticationManager.authenticate(
+                            new UsernamePasswordAuthenticationToken(
+                                    loginRequest.username(),
+                                    loginRequest.password()
+                            )
+                    );
 
-        SecurityContext context = SecurityContextHolder.createEmptyContext();
-        context.setAuthentication(authentication);
-        SecurityContextHolder.setContext(context);
+            SecurityContext context = SecurityContextHolder.createEmptyContext();
+            context.setAuthentication(authentication);
+            SecurityContextHolder.setContext(context);
 
-        HttpSession session = request.getSession(true);
-        session.setAttribute(
-                HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
-                context
-        );
+            HttpSession session = request.getSession(true);
+            session.setAttribute(
+                    HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
+                    context
+            );
 
-        return Map.of("message", "Admin login successful");
+            return ResponseEntity.ok(Map.of("message", "Admin login successful"));
+        } catch (BadCredentialsException | UsernameNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Invalid username or password"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Login error: " + e.getMessage()));
+        }
     }
 
     public record LoginRequest(String username, String password) {}
