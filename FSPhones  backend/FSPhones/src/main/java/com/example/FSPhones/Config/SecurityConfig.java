@@ -1,6 +1,8 @@
 package com.example.FSPhones.Config;
 
-import org.springframework.beans.factory.annotation.Value;
+import java.util.List;
+import java.util.function.Supplier;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -12,7 +14,6 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
@@ -25,10 +26,6 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-
-import java.util.function.Supplier;
-
-import java.util.List;
 
 @Configuration
 public class SecurityConfig {
@@ -82,11 +79,13 @@ public SecurityFilterChain securityFilterChain(
         CsrfTokenRepository csrfTokenRepository) throws Exception {
 
     http
-        .cors(cors -> {})
-        .csrf(csrf -> csrf
-            .csrfTokenRepository(csrfTokenRepository)
-            .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler())
-        )
+            .cors(cors -> {})
+        // .csrf(csrf -> csrf
+        //     .csrfTokenRepository(csrfTokenRepository)
+        //     .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler())
+        // )
+       
+             .csrf(AbstractHttpConfigurer::disable)
 
                 .securityContext(context -> context
                         .securityContextRepository(
@@ -100,7 +99,7 @@ public SecurityFilterChain securityFilterChain(
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/auth/csrf").permitAll()
+                        // .requestMatchers(HttpMethod.GET, "/auth/csrf").permitAll()
 
                         // Public phone viewing
                         .requestMatchers(HttpMethod.GET, "/phones/**").permitAll()
